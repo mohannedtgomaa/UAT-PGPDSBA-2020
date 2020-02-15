@@ -1,0 +1,577 @@
+---
+title: "Module 4 Project - Thera Bank"
+author: "Mohanned Gomaa"
+date: "2/15/2020"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+#Setting a working drict.
+```{r}
+setwd("C:/Users/mgomaa032/Desktop/PwC/Projects/DXB/PnO/WorkFroce analytics/UT Austin/Module 4/Week 3")
+getwd()
+```
+
+#Importing master data.
+```{r}
+library(knitr)
+library(readxl)
+Bank_Full_DS= read_xlsx('Thera Bank_Personal_Loan_Modelling-dataset-1.xlsx', sheet = 'Bank_Personal_Loan_Modelling', col_names = T)
+View(Bank_Full_DS)
+tail(Bank_Full_DS,10)
+```
+
+#Expletory Analysis 
+```{r}
+dim(Bank_Full_DS)
+names(Bank_Full_DS)
+head(Bank_Full_DS)
+View(Bank_Full_DS)
+str(Bank_Full_DS)
+summary(Bank_Full_DS)
+```
+
+#Missing Value Check
+```{r}
+sum(is.na(Bank_Full_DS))
+colSums(is.na(Bank_Full_DS)) #18 missing values for family members.
+```
+
+#Treating Missing Values 
+```{r}
+Bank_Full_DS[is.na(Bank_Full_DS)]=0 #I took an assumption that NAs or empty cells under family members variable, represent single customers, so I replaced these empty cells with Zeros.
+```
+
+#Removing Unnecessary Columns
+```{r}
+Bank_Full_DS= Bank_Full_DS [,-1] #Removing Customer ID Column
+```
+
+#EDA - Basic data summary, Univariate, Bivariate analysis, graphs
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(corrplot)
+corrplot(cor(Bank_Full_DS),method = 'square', title = 'Correlation matrix')
+
+Loan_Customers.profile= Bank_Full_DS %>% group_by(Bank_Full_DS$`Personal Loan`)%>%
+  summarise(Avg.Income= mean(Bank_Full_DS$`Income (in K/month)`),
+            Avg.exp= mean(Bank_Full_DS$`Experience (in years)`), 
+            Avg.CC= mean(Bank_Full_DS$CCAvg), 
+            Med.CD = mode(Bank_Full_DS$`CD Account`))
+print(Loan_Customers.profile)
+
+
+hist(Bank_Full_DS$`Income (in K/month)`, main = "Income Profile",col='Navy', xlab = 'Income')
+abline(v = mean(Bank_Full_DS$`Income (in K/month)`,col='Blue'))
+
+hist(Bank_Full_DS$CCAvg, main = "Credit Card Profile",col='Navy', xlab = 'Avg Spend')
+abline(v = mean(Bank_Full_DS$CCAvg,col='Blue'))
+
+hist(Bank_Full_DS$`Experience (in years)`, main = "Experience Profile",col='Navy', xlab = 'Exp')
+abline(v = mean(Bank_Full_DS$`Experience (in years)`,col='Blue'))
+
+hist(Bank_Full_DS$Mortgage, main = "Mortgage Profile",col='Navy', xlab = 'Value')
+abline(v = mean(Bank_Full_DS$Mortgage,col='Blue'))
+
+boxplot(Bank_Full_DS$`Income (in K/month)`)
+boxplot(Bank_Full_DS$CCAvg)
+boxplot(Bank_Full_DS$`Experience (in years)`)
+boxplot(Bank_Full_DS$Mortgage)
+```
+
+#Split Dataset into Train 70% and Test 30%
+```{r}
+library(caTools) #Call needed packages
+set.seed(1000) #Setting a seed Conrtol Randomness 
+spl= sample.split(Bank_Full_DS$`Personal Loan`,SplitRatio = 0.7) #Setting Split Ratio
+Train_DS_Bank = subset(Bank_Full_DS,spl==T) #Train 70%
+Test_DS_Bank = subset(Bank_Full_DS,spl== F) #Test 30%
+dim(Train_DS_Bank) #Checking Dimensions 
+dim(Test_DS_Bank) #Checking Dimensions
+Test_DS_Bank_OG =subset(Bank_Full_DS,spl== F) 
+head(Test_DS_Bank_OG)
+view(Test_DS_Bank)
+```
+
+
+# 2.1 Clustering and 2.2 interpretation 
+```{r}
+#I’ve selected K-means (Centroid based) Clustering, as it is less complicated and expensive to its adversary, hierarchal clustering.  
+head(Train_DS_Bank)
+str(Train_DS_Bank)
+Scale_Train_DS = scale(Train_DS_Bank) #Scale data to ensure that all columns has equal weights. 
+str(Scale_Train_DS)
+head(Scale_Train_DS) #view scaled Data
+print(Scale_Train_DS) #view scaled Data
+```
+
+# K-means clustering before finetuning 
+```{r}
+set.seed (1000)
+Clust_2 = kmeans(x=Scale_Train_DS,centers = 2, nstart = 5) #Setting up my clusters, at a random number of centers
+print(Clust_2) #views results 
+#Within cluster sum of squares by cluster:
+  #[1] 27869.70 11780.18
+  #(between_SS / total_SS =  12.8 %)
+```
+
+# plot K-means clustering
+```{r}
+library(cluster)
+clusplot(Scale_Train_DS,Clust_2$cluster,color = T, shade = T ,lines =1) #The two clusters only explained ~33% of the point variability
+```
+
+# To improve model output, we need to find the right number for clusters
+```{r}
+#running 5 trials for no. of k with the least tot.withinss
+totwss = rep(0,5)
+for (k in 1:5) {set.seed(1000) 
+  clust = kmeans(x=Scale_Train_DS,centers = k, nstart = 5)
+  totwss[k] = clust$tot.withinss}
+print(totwss)
+plot (c(1:5),totwss, type = "b") #elbow method to identify the right number of clusters, plateau at 4
+```
+
+#Another way to find the right number of clusters, by through NbClust library
+```{r}
+library(NbClust)
+set.seed(1000)
+nc = NbClust(Scale_Train_DS,min.nc=2,max.nc=5,method ="kmeans")
+```
+
+```{r}
+Clust_4 = kmeans(x=Scale_Train_DS,centers = 4, nstart = 5) 
+print(Clust_4)
+```
+
+```{r}
+Train_DS_Bank$Cluster= Clust_2$cluster
+View(Train_DS_Bank)
+custprofile = aggregate(Train_DS_Bank,list(Train_DS_Bank$Cluster), FUN = 'mean')
+print(custprofile)
+View(custprofile)
+```
+
+#Building Model 1 - CART 
+#CART Decision Tree - CART 
+```{r}
+Train_DS_Bank_OG=Train_DS_Bank[,-14] 
+View(Train_DS_Bank_OG)
+head(Train_DS_Bank_OG)
+nrow(Train_DS_Bank_OG)
+sum(Train_DS_Bank_OG$`Personal Loan`=="1")/nrow(Train_DS_Bank_OG)*100 #Checking the percentage from my data who accepted the loan offer ~9.6%
+```
+
+#CART Install library
+```{r}
+library(rpart)
+library(rpart.plot)
+Train_DS_Bank_OG$`Personal Loan`= as.factor(Train_DS_Bank_OG$`Personal Loan`)
+Test_DS_Bank_OG$`Personal Loan`= as.factor(Test_DS_Bank_OG$`Personal Loan`)
+```
+
+#CART Built the Tree
+```{r}
+CART= rpart(formula = Train_DS_Bank_OG$`Personal Loan`~.,
+            data = Train_DS_Bank_OG, method = "class", minbucket = 3,cp = 0)
+CART
+```
+
+#CART Plot and View the Tree
+```{r}
+rpart.plot(CART) #Resulted in a highly complex tree that needs to be pruned
+
+printcp(CART)
+plotcp(CART) # Cross Validation shows the lowest Error is at level 4, 5 splits 
+```
+
+
+#CART Prune to simplify the tree
+```{r}
+Pruned_CART = prune(CART, cp = 0.015,'CP')
+printcp(Pruned_CART)
+rpart.plot(Pruned_CART) #View the simplified Tree
+Pruned_CART
+```
+
+#CART Busniess Rules 
+```{r}
+path.rpart(Pruned_CART,c(1:7))
+```
+
+#CART Prediction Outcome
+```{r}
+Pruned_CART_Out_Train=Train_DS_Bank_OG
+Pruned_CART_Out_Train$Prediction = predict(Pruned_CART, data=Pruned_CART_Out_Train, type = "class")
+Pruned_CART_Out_Train$Score = predict(Pruned_CART, data=Pruned_CART_Out_Train, type = "prob")[,'1']
+head(Pruned_CART_Out_Train)
+View(Pruned_CART_Out_Train)
+
+library(dbplyr)
+library(tidyverse)
+
+
+Pruned_CART_Out_Test=Test_DS_Bank_OG
+
+Pruned_CART_Out_Test$Prediction = Pruned_CART %>% predict(Pruned_CART_Out_Test, type = "class")
+
+Pruned_CART_Out_Test$Score = (Pruned_CART %>% predict(Pruned_CART_Out_Test, type = "prob"))[,'1']
+
+head(Pruned_CART_Out_Test)
+View(Pruned_CART_Out_Train)
+View(Pruned_CART_Out_Test)
+```
+
+#CART_Confusion Matrix - Model Performance 4.1
+```{r}
+CART_ConfusionMatrix_Train= table (Pruned_CART_Out_Train$`Personal Loan`,Pruned_CART_Out_Train$Prediction)
+
+CART_ConfusionMatrix_Test= table (Pruned_CART_Out_Test$`Personal Loan`,Pruned_CART_Out_Test$Prediction)
+
+print(CART_ConfusionMatrix_Train) #Very high accuracy
+print(CART_ConfusionMatrix_Test) #Very high accuracy
+
+print((CART_ConfusionMatrix_Train [1,2]+CART_ConfusionMatrix_Train [2,1]))/nrow(Pruned_CART_Out_Train) #Approx Error rate ~ 1.43%
+
+print((CART_ConfusionMatrix_Test [1,2]+CART_ConfusionMatrix_Test [2,1]))/nrow(Pruned_CART_Out_Test) #Approx Error rate ~ 2.13%
+
+print((CART_ConfusionMatrix_Train [1,1]+CART_ConfusionMatrix_Train [2,2]))/nrow(Pruned_CART_Out_Train) #Approx Accuracy rate ~ 98.6%
+
+print((CART_ConfusionMatrix_Test [1,1]+CART_ConfusionMatrix_Test [2,2]))/nrow(Pruned_CART_Out_Test) #Approx Accuracy rate ~ 98%
+
+print((CART_ConfusionMatrix_Train [2,2]))/(CART_ConfusionMatrix_Train [2,1]+CART_ConfusionMatrix_Train [2,2]) #Approx Precision rate ~ 87.5%
+
+print((CART_ConfusionMatrix_Test [2,2]))/(CART_ConfusionMatrix_Test [2,1]+CART_ConfusionMatrix_Test [2,2]) #Approx Precision rate ~ 81%
+
+print((CART_ConfusionMatrix_Train [2,2]))/(CART_ConfusionMatrix_Train [1,2]+CART_ConfusionMatrix_Train [2,2]) #Approx Sensitivity  rate ~ 97%
+
+print((CART_ConfusionMatrix_Test [2,2]))/(CART_ConfusionMatrix_Test [1,2]+CART_ConfusionMatrix_Test [2,2]) #Approx Sensitivity  rate ~ 96.6%
+
+print((CART_ConfusionMatrix_Train [1,1]))/(CART_ConfusionMatrix_Train [1,1]+CART_ConfusionMatrix_Train [2,1]) #Approx Specificity rate ~ 98.6%
+
+print((CART_ConfusionMatrix_Test [1,1]))/(CART_ConfusionMatrix_Test [1,1]+CART_ConfusionMatrix_Test [2,1]) #Approx Specificity rate ~ 97.9%
+
+```
+
+#Break down my probs in Quantiles, as our focus to find the customers with the high prob to respond.
+```{r}
+CART_QS_Train = quantile(Pruned_CART_Out_Train$Score, prob= seq(0,1,length=11))
+
+CART_QS_Test = quantile(Pruned_CART_Out_Test$Score, prob= seq(0,1,length=11))
+
+print(CART_QS_Train)
+print(CART_QS_Test)
+
+plot(CART_QS_Train)
+lines(CART_QS_Train)#Top 10 of all probs falls in 6th & and above
+
+plot(CART_QS_Test)
+lines(CART_QS_Test)#Top 10 of all probs falls in 6th & and above
+```
+
+#CART - Create a threshold for probs Cut-off
+```{r}
+CART_Threshold= CART_QS_Train [6]
+
+mean(Pruned_CART_Out_Train$`Personal Loan`[Pruned_CART_Out_Train$Score > CART_Threshold]=='1') #Avg. Accuracy of my prediction is ~97.3%
+
+mean(Pruned_CART_Out_Test$`Personal Loan`[Pruned_CART_Out_Test$Score > CART_Threshold]=='1') #Avg. Accuracy of my prediction is ~97%
+```
+
+#CART_Rank Order Table - Model Performance
+```{r}
+Pruned_CART_Out_Train$deciles = cut(Pruned_CART_Out_Train$Score,unique(CART_QS_Train),include.lowest = F)
+
+Pruned_CART_Out_Test$deciles = cut(Pruned_CART_Out_Test$Score,unique(CART_QS_Test),include.lowest = F)
+
+#Create deciles to bucket probabilities of each class.
+print(Pruned_CART_Out_Train$deciles)
+print(Pruned_CART_Out_Test$deciles)
+
+head(Pruned_CART_Out_Train)
+head(Pruned_CART_Out_Test)
+```
+
+#CART_Rank Order Table - Building Blocks 
+```{r}
+library(data.table)
+CART_Train_DT = data.table(Pruned_CART_Out_Train)
+CART_Test_DT = data.table(Pruned_CART_Out_Test)#Convert data in DT
+View(CART_Train_DT)
+CART_Train_rnk_tbl = CART_Train_DT[ ,list(cnt = length(CART_Train_DT$`Personal Loan`),cnt_tar1 =sum(CART_Train_DT$`Personal Loan`=="1"),cnt_tar0 =sum(CART_Train_DT$`Personal Loan`=="0")),by= deciles][order(-deciles)] #Base Count, Right and worng 
+CART_Train_rnk_tbl$rrate= round(CART_Train_rnk_tbl$cnt_tar1/CART_Train_rnk_tbl$cnt)*100 # % Right
+CART_Train_rnk_tbl$Cum_Resp = cumsum(CART_Train_rnk_tbl$cnt_tar1) #Cum right
+CART_Train_rnk_tbl$Cum_Non_Resp = cumsum(CART_Train_rnk_tbl$cnt_tar0) #Cum wrong
+CART_Train_rnk_tbl$Cum_rel_resp= round(CART_Train_rnk_tbl$Cum_Resp/sum(CART_Train_rnk_tbl$cnt_tar1),4)*100 # % Cum right
+CART_Train_rnk_tbl$Cum_rel_Non_resp= round(CART_Train_rnk_tbl$Cum_Non_Resp/sum(CART_Train_rnk_tbl$cnt_tar0),4)*100 # % Cum wrong
+CART_Train_rnk_tbl$Ks= abs(CART_Train_rnk_tbl$Cum_rel_resp-CART_Train_rnk_tbl$Cum_rel_Non_resp) # Ks
+
+CART_Test_rnk_tbl = CART_Test_DT[ ,list(cnt = length(CART_Test_DT$`Personal Loan`),cnt_tar1 =sum(CART_Test_DT$`Personal Loan`=="1"),cnt_tar0 =sum(CART_Test_DT$`Personal Loan`=="0")),by= deciles][order(-deciles)] #Base Count, Right and worng 
+CART_Test_rnk_tbl$rrate= round(CART_Test_rnk_tbl$cnt_tar1/CART_Test_rnk_tbl$cnt)*100 # % Right
+CART_Test_rnk_tbl$Cum_Resp = cumsum(CART_Test_rnk_tbl$cnt_tar1) #Cum right
+CART_Test_rnk_tbl$Cum_Non_Resp = cumsum(CART_Test_rnk_tbl$cnt_tar0) #Cum wrong
+CART_Test_rnk_tbl$Cum_rel_resp= round(CART_Test_rnk_tbl$Cum_Resp/sum(CART_Test_rnk_tbl$cnt_tar1),4)*100 # % Cum right
+CART_Test_rnk_tbl$Cum_rel_Non_resp= round(CART_Test_rnk_tbl$Cum_Non_Resp/sum(CART_Test_rnk_tbl$cnt_tar0),4)*100 # % Cum wrong
+CART_Test_rnk_tbl$Ks= abs(CART_Test_rnk_tbl$Cum_rel_resp-CART_Test_rnk_tbl$Cum_rel_Non_resp) # Ks
+
+print(CART_Train_rnk_tbl)
+print(CART_Test_rnk_tbl)
+```
+
+#CART_ ROC, AUC and Gini - Model performance
+```{r}
+library(ROCR)
+library(ineq)
+CART_pred_Obj_Train = prediction(Pruned_CART_Out_Train$Score, Pruned_CART_Out_Train$`Personal Loan`) # Building ROC and  compare
+CART_pref_Train = performance(CART_pred_Obj_Train, "tpr","fpr") # Calculate TPR and FPR
+plot(CART_pref_Train) # Plot performance curve 
+
+CART_pred_Obj_Test = prediction(Pruned_CART_Out_Test$Score, Pruned_CART_Out_Test$`Personal Loan`) # Building ROC and  compare
+CART_pref_Test = performance(CART_pred_Obj_Test, "tpr","fpr") # Calculate TPR and FPR
+plot(CART_pref_Test) # Plot performance curve 
+
+#Calculate KS
+CART_Train_Ks = max(CART_pref_Train@y.values[[1]]-CART_pref_Train@x.values[[1]])
+print(CART_Train_Ks) #K is 91.2 
+
+CART_Test_Ks = max(CART_pref_Test@y.values[[1]]-CART_pref_Test@x.values[[1]])
+print(CART_Test_Ks) #K is 92.4
+
+#Calculate AUC
+CART_AUC_Train = performance(CART_pred_Obj_Train,"auc")
+CART_AUC_Train = as.numeric(CART_AUC_Train@y.values)
+print (CART_AUC_Train) # AUC is ~98
+
+CART_AUC_Test = performance(CART_pred_Obj_Test,"auc")
+CART_AUC_Test = as.numeric(CART_AUC_Test@y.values)
+print (CART_AUC_Test) # AUC is ~98
+
+#Calculate Gini
+CART_Gini_Train = ineq(Pruned_CART_Out_Train$Score,"gini")
+CART_Gini_Test = ineq(Pruned_CART_Out_Test$Score,"gini")
+print(CART_Gini_Train) # Gini equal 0.871
+print(CART_Gini_Test) # Gini equal 0.874
+```
+
+#CART_ Concordance and Discordance ratios'
+```{r}
+library(InformationValue)
+Concordance(actuals = Pruned_CART_Out_Train$`Personal Loan`, predictedScores = Pruned_CART_Out_Train$Score)
+
+#Concordance 0.9650382
+#Discordance 0.03496177
+#Tied 4.857226e-17
+
+Concordance(actuals = Pruned_CART_Out_Test$`Personal Loan`, predictedScores = Pruned_CART_Out_Test$Score)
+
+#Concordance 0.9670293
+#Discordance 0.03297075
+#Tied -4.163336e-17
+```
+
+
+##Building Random Forest Model 
+#Random Forest Install/Call Library
+```{r}
+sum(Train_DS_Bank_OG$Personal.Loan=="1")
+sum(Train_DS_Bank_OG$Personal.Loan=="1")/nrow(Train_DS_Bank_OG)*100 #Checking the percentage from my data who accepted the loan offer
+library(randomForest)
+library(caret)#Build Confusion Matrix 
+library(e1071)
+```
+
+#Build Random Forest
+```{r}
+head(Train_DS_Bank_OG)
+set.seed(1000)
+names(Train_DS_Bank_OG) = make.names(names(Train_DS_Bank_OG))
+names(Test_DS_Bank) = make.names(names(Test_DS_Bank))
+
+RndForest = randomForest(Train_DS_Bank_OG$Personal.Loan~.,data = Train_DS_Bank_OG,ntree=501,mtry=3,nodesize=10,importance=T)
+print(RndForest)
+```
+
+#Evaluate Error rate and try to reduce it
+```{r}
+print(RndForest$err.rate)
+plot(RndForest) #Based on the plot we see that OOB plateau after ~51, so no point to use 501 trees in our forest
+```
+#Evaluate the important of the variables used on our model
+```{r}
+importance(RndForest) #The most important two variables are Income and Education for our predication 
+View(Train_DS_Bank_OG)
+```
+
+#Run number of Scenarios for mtry or variables randomly selected to understand what is the impact on my OOB.
+```{r}
+set.seed(1000)
+T_RndForest = tuneRF(Train_DS_Bank_OG[,-9],Train_DS_Bank_OG$Personal.Loan,mtryStart = 6,stepFactor = 1.5,ntreeTry = 51,improve = 0.0001, nodesize = 10,trace = T,plot = T,doBest = T,importance=T) #6 Variables is the best, yielding the lowest OOB
+```
+
+#Testing my RF model predication Power
+```{r}
+RF_OutPut_Train = Train_DS_Bank_OG
+RF_OutPut_Test = Test_DS_Bank
+
+RF_OutPut_Train$Predict.Class = predict(T_RndForest,RF_OutPut_Train,type = "class")
+
+RF_OutPut_Test$Predict.Class = predict(T_RndForest,RF_OutPut_Test,type = "class")
+
+RF_OutPut_Train$Predict.Score = predict(T_RndForest,RF_OutPut_Train,type = "prob")[,"1"] 
+
+RF_OutPut_Test$Predict.Score = predict(T_RndForest,RF_OutPut_Test,type = "prob")[,"1"] 
+#Porb for who expected the personal loan offer
+View(RF_OutPut_Train)
+View(RF_OutPut_Test)
+```
+
+#RF_Confusion Matrix - Model Performance 4.1
+```{r}
+RF_ConfusionMatrix_Train= table (RF_OutPut_Train$Personal.Loan,RF_OutPut_Train$Predict.Class)
+
+library(caret)
+confusionMatrix(RF_OutPut_Train$Personal.Loan,RF_OutPut_Train$Predict.Class)
+
+RF_ConfusionMatrix_Test= table (RF_OutPut_Test$Personal.Loan,RF_OutPut_Test$Predict.Class)
+
+print(RF_ConfusionMatrix_Train) #Very high accuracy
+print(RF_ConfusionMatrix_Test) #Very high accuracy
+
+print((RF_ConfusionMatrix_Train [1,2]+RF_ConfusionMatrix_Train [2,1]))/nrow(RF_OutPut_Train) #Approx Error rate ~ 0.66%
+
+print((RF_ConfusionMatrix_Test [1,2]+RF_ConfusionMatrix_Test [2,1]))/nrow(RF_OutPut_Test) #Approx Error rate ~ 1.9%
+
+print((RF_ConfusionMatrix_Train [1,1]+RF_ConfusionMatrix_Train [2,2]))/nrow(RF_OutPut_Train) #Approx Accuracy rate ~ 99%
+
+print((RF_ConfusionMatrix_Test [1,1]+RF_ConfusionMatrix_Test [2,2]))/nrow(RF_OutPut_Test) #Approx Accuracy rate ~ 98%
+
+print((RF_ConfusionMatrix_Train [2,2]))/(RF_ConfusionMatrix_Train [2,1]+RF_ConfusionMatrix_Train [2,2]) #Approx Precision rate ~ 93.5%
+
+print((RF_ConfusionMatrix_Test [2,2]))/(RF_ConfusionMatrix_Test [2,1]+RF_ConfusionMatrix_Test [2,2]) #Approx Precision rate ~ 83.3%
+
+print((RF_ConfusionMatrix_Train [2,2]))/(RF_ConfusionMatrix_Train [1,2]+RF_ConfusionMatrix_Train [2,2]) #Approx Sensitivity  rate ~ 100%
+
+print((RF_ConfusionMatrix_Test [2,2]))/(RF_ConfusionMatrix_Test [1,2]+RF_ConfusionMatrix_Test [2,2]) #Approx Sensitivity  rate ~ 97%
+
+print((RF_ConfusionMatrix_Train [1,1]))/(RF_ConfusionMatrix_Train [1,1]+RF_ConfusionMatrix_Train [2,1]) #Approx Specificity rate ~ 99%
+
+print((RF_ConfusionMatrix_Test [1,1]))/(RF_ConfusionMatrix_Test [1,1]+RF_ConfusionMatrix_Test [2,1]) #Approx Specificity rate ~ 98%
+```
+
+#Break down my probs in Quantiles, as our focus to find the customers with the high prob to respond.
+```{r}
+RF_QS_Train = quantile(RF_OutPut_Train$Predict.Score, prob= seq(0,1,length=11))
+
+RF_QS_Test = quantile(RF_OutPut_Test$Predict.Score, prob= seq(0,1,length=11))
+
+print(RF_QS_Train)
+print(RF_QS_Test)
+
+plot(RF_QS_Train)
+lines(RF_QS_Train)#Top 10 of all probs falls in 10th & 11th range
+
+plot(RF_QS_Test)
+lines(RF_QS_Test)#Top 10 of all probs falls in 10th & 11th range
+```
+
+#Create a threshold for probs Cut-off
+```{r}
+RF_Threshold= RF_QS_Train [10]
+
+mean(RF_OutPut_Train$Personal.Loan[RF_OutPut_Train$Predict.Score>RF_Threshold]=="1") #Avg. Accuracy of my prediction is ~96%
+
+mean(RF_OutPut_Test$Personal.Loan[RF_OutPut_Test$Predict.Score>RF_Threshold]=="1") #Avg. Accuracy of my prediction is ~95%
+```
+
+
+#RF_Rank Order Table - Model Performance
+```{r}
+RF_OutPut_Train$deciles = cut(RF_OutPut_Train$Predict.Score,unique(RF_QS_Train), inculde.lowest = F)
+RF_OutPut_Test$deciles = cut(RF_OutPut_Test$Predict.Score,unique(RF_QS_Test), inculde.lowest = F) #Create deciles to bucket probabilities of each class.
+
+print(RF_OutPut_Train$deciles)
+print(RF_OutPut_Test$deciles)
+
+head(RF_OutPut_Train)
+head(RF_OutPut_Test)
+```
+
+#RF_Rank Order Table - Building Blocks 
+```{r}
+library(data.table)
+RF_Train_DT = data.table(RF_OutPut_Train)
+RF_Test_DT = data.table(RF_OutPut_Test)#Convert data in DT
+View(RF_Train_DT)
+RF_Train_rnk_tbl = RF_Train_DT[ ,list(cnt = length(RF_Train_DT$Personal.Loan),cnt_tar1 =sum(RF_Train_DT$Personal.Loan=="1"),cnt_tar0 =sum(RF_Train_DT$Personal.Loan=="0")),by= deciles][order(-deciles)] #Base Count, Right and worng 
+RF_Train_rnk_tbl$rrate= round(RF_Train_rnk_tbl$cnt_tar1/RF_Train_rnk_tbl$cnt)*100 # % Right
+RF_Train_rnk_tbl$Cum_Resp = cumsum(RF_Train_rnk_tbl$cnt_tar1) #Cum right
+RF_Train_rnk_tbl$Cum_Non_Resp = cumsum(RF_Train_rnk_tbl$cnt_tar0) #Cum wrong
+RF_Train_rnk_tbl$Cum_rel_resp= round(RF_Train_rnk_tbl$Cum_Resp/sum(RF_Train_rnk_tbl$cnt_tar1),4)*100 # % Cum right
+RF_Train_rnk_tbl$Cum_rel_Non_resp= round(RF_Train_rnk_tbl$Cum_Non_Resp/sum(RF_Train_rnk_tbl$cnt_tar0),4)*100 # % Cum wrong
+RF_Train_rnk_tbl$Ks= abs(RF_Train_rnk_tbl$Cum_rel_resp-RF_Train_rnk_tbl$Cum_rel_Non_resp) # Ks
+print(RF_Train_rnk_tbl)
+
+RF_Test_rnk_tbl = RF_Test_DT[ ,list(cnt = length(RF_Test_DT$Personal.Loan),cnt_tar1 =sum(RF_Test_DT$Personal.Loan=="1"),cnt_tar0 =sum(RF_Test_DT$Personal.Loan=="0")),by=deciles][order(-deciles)]
+RF_Test_rnk_tbl$rrate= round(RF_Test_rnk_tbl$cnt_tar1/RF_Test_rnk_tbl$cnt)*100
+RF_Test_rnk_tbl$Cum_Resp = cumsum(RF_Test_rnk_tbl$cnt_tar1)
+RF_Test_rnk_tbl$Cum_Non_Resp = cumsum(RF_Test_rnk_tbl$cnt_tar0)
+RF_Test_rnk_tbl$Cum_rel_resp= round(RF_Test_rnk_tbl$Cum_Resp/sum(RF_Test_rnk_tbl$cnt_tar1),4)*100
+RF_Test_rnk_tbl$Cum_rel_Non_resp= round(RF_Test_rnk_tbl$Cum_Non_Resp/sum(RF_Test_rnk_tbl$cnt_tar0),4)*100
+RF_Test_rnk_tbl$Ks= abs(RF_Test_rnk_tbl$Cum_rel_resp-RF_Test_rnk_tbl$Cum_rel_Non_resp)
+print(RF_Test_rnk_tbl)
+```
+
+#RF_ ROC, AUC and Gini - Model performance
+```{r}
+library(ROCR)
+library(ineq)
+RF_pred_Obj_Train = prediction(RF_OutPut_Train$Predict.Score, RF_OutPut_Train$Personal.Loan) # Building ROC and  compare
+RF_pref_Train = performance(RF_pred_Obj_Train, "tpr","fpr") # Calculate TPR and FPR
+plot(RF_pref_Train) # Plot performance curve 
+
+RF_pred_Obj_Test = prediction(RF_OutPut_Test$Predict.Score, RF_OutPut_Test$Personal.Loan) # Building ROC and  compare
+RF_pref_Test = performance(RF_pred_Obj_Test, "tpr","fpr") # Calculate TPR and FPR
+plot(RF_pref_Test) # Plot performance curve 
+
+#Calculate KS
+RF_Train_Ks = max(RF_pref_Train@y.values[[1]]-RF_pref_Train@x.values[[1]])
+print(RF_Train_Ks) #K is 99.5
+
+RF_Test_Ks = max(RF_pref_Test@y.values[[1]]-RF_pref_Test@x.values[[1]])
+print(RF_Test_Ks) #K is 96.8 
+
+#Calculate AUC
+RF_AUC_Train = performance(RF_pred_Obj_Train,"auc")
+RF_AUC_Train = as.numeric(RF_AUC_Train@y.values)
+print (RF_AUC_Train) # AUC is ~100
+
+RF_AUC_Test = performance(RF_pred_Obj_Test,"auc")
+RF_AUC_Test = as.numeric(RF_AUC_Test@y.values)
+print (RF_AUC_Test) # AUC is ~99.8
+
+#Calculate Gini
+RF_Gini_Train = ineq(RF_OutPut_Train$Predict.Score,"gini")
+RF_Gini_Test = ineq(RF_OutPut_Test$Predict.Score,"gini")
+print(RF_Gini_Train) # Gini equal 0.898
+print(RF_Gini_Test) # Gini equal 0.898
+```
+
+#RF_ Concordance and Discordance ratios'
+```{r}
+library(InformationValue)
+Concordance(actuals = RF_OutPut_Train$Personal.Loan, predictedScores = RF_OutPut_Train$Predict.Score)
+
+#Concordance 0.9998504
+#Discordance 0.000149562
+#Tied 2.493665e-17
+Concordance(actuals = RF_OutPut_Test$Personal.Loan, predictedScores = RF_OutPut_Test$Predict.Score)
+#Concordance 0.9977927
+#Discordance 0.002207268
+#Tied -7.806256e-18
+```
+
+
+
