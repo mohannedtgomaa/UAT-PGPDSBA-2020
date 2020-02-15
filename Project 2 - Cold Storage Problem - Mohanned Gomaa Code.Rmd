@@ -1,0 +1,215 @@
+---
+title: "Project 2"
+author: "Mohanned Gomaa"
+date: "11/8/2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#               Module 2 - Project 2 Cold Storage Problem
+
+
+# Set a Working directory, for ease of processing.
+setwd('C:/Users/mgomaa032/Desktop/PwC/Projects/DXB/PnO/WorkFroce analytics/UAT/Module 2/Project')
+# Check that WD was set.
+getwd()
+
+#Import data from CSV file
+TemperatureData = read.csv('Cold_Storage_Temp_Data.csv',header = T)
+
+# View Data
+View(TemperatureData)
+head(TemperatureData)
+tail(TemperatureData)
+
+# attach data for easy access
+attach(TemperatureData)
+
+# Quick overview of data 
+summary(TemperatureData)
+str(TemperatureData)
+
+# Visualize_Data
+hist(Temperature,main = 'Storage Temperature', col = 'Navy')
+abline(v= mean(Temperature), col='Blue')
+abline(v= median(Temperature), col='turquoise')
+#Temperature data seems to normally distributed, no visible signs of skewness 
+boxplot(Temperature~Season, horizontal = T, main='Storage Temperature by Season', col=c('Blue', 'Navy','turquoise'))
+#Temperature data by season seems to be of a similar distribution, with small expectation of winter.  
+
+
+#Problem1 
+#Q1: Mean Temperature by Season 
+Avg_Temp_Session=by(Temperature,INDICES = Season, FUN = mean)
+Avg_Temp_Session
+# Visualize Data
+Summer= hist(TemperatureData$Temperature[TemperatureData$Season=="Summer"],main = 'Storage Temperature - Summer', col = 'Navy',xlab = 'Temp')
+abline(v= mean(TemperatureData$Temperature[TemperatureData$Season=="Summer"]), col='Blue')
+abline(v= median(TemperatureData$Temperature[TemperatureData$Season=="Summer"]), col='turquoise')
+
+Winter= hist(TemperatureData$Temperature[TemperatureData$Season=="Winter"],main = 'Storage Temperature - Winter', col = 'Navy',xlab = 'Temp')
+abline(v= mean(TemperatureData$Temperature[TemperatureData$Season=="Winter"]), col='Blue')
+abline(v= median(TemperatureData$Temperature[TemperatureData$Season=="Winter"]), col='turquoise')
+
+Rainy= hist(TemperatureData$Temperature[TemperatureData$Season=="Rainy"],main = 'Storage Temperature - Rainy', col = 'Navy',xlab = 'Temp')
+abline(v= mean(TemperatureData$Temperature[TemperatureData$Season=="Rainy"]), col='Blue')
+abline(v= median(TemperatureData$Temperature[TemperatureData$Season=="Rainy"]), col='turquoise')
+
+
+#Q2: Overall mean for the full year
+# Assumption: As no year column was inculded in the data set,
+# I have assumed that data belong to one year.
+Avg_Temp_Annual=mean(Temperature)
+Avg_Temp_Annual
+
+#Q3: Overall Standard Deviation for the full year
+# Assumption: As no year column was inculded in the data set,
+# I have assumed that data belong to one year.
+SD_Temp_Annual = sd(Temperature)
+SD_Temp_Annual
+
+# Q4: The probability of temperature have fallen below 2 C
+# Assumption: Normal distribution assumed
+Temp_Prop_lessthan_2 = pnorm (2, mean = Avg_Temp_Annual, sd = SD_Temp_Annual, lower.tail = T)
+
+
+
+# Q5: The probability of temperature have gone above 4 C
+# Assumption: Normal distribution assumed
+Temp_Prop_Morethan_4 = pnorm (4, mean = Avg_Temp_Annual, sd = SD_Temp_Annual, lower.tail = F)
+Temp_Prop_Morethan_4
+0.01612075*100
+
+# Q6: AMC Company penalty
+# P(2.5%<Propability of Temp<5%)=10%
+Temp_Prop_lessthan_2+Temp_Prop_Morethan_4
+
+#Q7: One way Annova
+# Assumption:Seasons are the factors 
+# H0: Temp_Winter=Temp_Rainy= Temp_Summar
+# Ha: H0 is not true
+  # Test for normailty 
+Is_it_normal=shapiro.test(Temperature)
+Is_it_normal
+0.05044>0.05
+# Since p-value of the test is larger than 5% significance level, 
+# we fail to reject the null hypothesis that the response follows the normal distribution. 
+
+  # Test for Homogeneity of varaince 
+require(Rcmdr) #call library 
+Are_Var_equal=leveneTest(Temperature~Season,data = TemperatureData)
+Are_Var_equal
+0.0003951>0.05
+# Since the p-value is smaller than 5% significance level, 
+# we reject the null hypothesis of homogeneity of variances.
+
+
+  # Average Temperature by session
+Mean_Temp_By_Session= by(Temperature,INDICES = Season,FUN = mean)
+Mean_Temp_By_Session
+# At first glance, mean seem to with similar range, with minor expectation of winter.
+
+  # Varaince Temperature by session
+Var_Temp_By_Session= by(Temperature,INDICES = Season,FUN = var)
+Var_Temp_By_Session
+#Variance seems within an approximate range, with exception to rainy session. 
+
+  #Anova Model
+Anova_Temp= aov(Temperature~Season,data = TemperatureData)
+summary(Anova_Temp)
+# The Pvalue is 5.08e-11, which is highly significant, therefore we reject 
+# the null hypothesis that the three population means are identical.
+# At least for one season mean temperature is different from the rest.
+  
+  #Anova ModelSupport Graphs 
+  # The following two graphs are introduced to check the distribution of the residuals.
+plot(Anova_Temp, col=c('Blue', 'Navy','turquoise'))
+# Residuals vs Fitted graph show that two seasons means are close to each other,while the third is faraway. 
+# Normal Q-Q graph show indicates that the normality assumption holds. 
+
+# Alternative for Anova, when varaince is unequal
+install.packages('onewaytests')
+require(onewaytests)
+Unequal_var_test= welch.test(Temperature~Season,data = TemperatureData)
+Unequal_var_test
+?welch.test
+# The welch test results support ANOVA results, we can confirm 
+# that at least one of the three populations means is different
+
+
+  #Paired Test 
+TukeyHSD(Anova_Temp)
+# P-value is significant for comparing temperature mean levels for these paired seasons winter rainy and winter-summer, 
+# but not for Summer-rainy. The null hypothesis of equality of all 
+# population means is rejected. It is now clear that mean temperature
+# for Summer and rainy is similar but temperature for 
+# type winter is significantly different from these two.
+
+
+
+#Problem2
+  #Ho: Storage Temp <= 3.9 C 
+  #Ha: Storage Temp > 3.9 C
+  # a=0.01
+
+#Import data from CSV file
+MarTemperatureData = read.csv('Cold_Storage_Mar2018.csv',header = T)
+
+#View Data
+View(MarTemperatureData)
+head(MarTemperatureData)
+tail(MarTemperatureData)
+
+#attach data for easy access
+attach(MarTemperatureData)
+
+#Quick overview of data 
+summary(MarTemperatureData)
+str(MarTemperatureData)
+
+#Visualize_Data
+hist(MarTemperatureData$Temperature,main = 'March Storage Temperature', col = 'Navy', xlab = 'Temerature')
+abline(v= mean(MarTemperatureData$Temperature), col='Blue')
+abline(v= median(MarTemperatureData$Temperature), col='turquoise')
+# March Temperature data seems to be skewed to the right, 
+# meaning on considerably less days the Temperature surpassed a mean of 3.974 C.
+
+
+# Q1: Type of hypothesis test
+#  As we trying to test the mean of a single group against
+#  a known mean, hence we should use one sample t-test, single tail.
+#  We chose the t-test as the population parameters (mean and standard deviation) 
+#  are not known.
+
+#Q2: Hypothesis test
+
+#Setp 1: State Ho and Ha
+  # Ho: Storage Temp <= 3.9 C 
+  # Ha: Storage Temp > 3.9 C
+  # a=0.01
+
+# Step1:  Avg. Storage Temperature or mu
+March_Avg_Temp= mean(MarTemperatureData$Temperature)
+March_Avg_Temp
+
+# Step2: Sd Storage Temperature 
+March_sd_Temp= sd(MarTemperatureData$Temperature)
+March_sd_Temp
+
+# Step3: Calculate P-value 
+Hypo_test = t.test(MarTemperatureData$Temperature,mu=3.9,alternative = 'greater',conf.level = 0.99)
+Hypo_test
+t.stat = (March_Avg_Temp - 3.9)/(March_sd_Temp/sqrt(35))
+t.stat
+Pvalue= 1- pt(t.stat, 35-1)
+Pvalue
+
+# Q3: Inference 
+0.004711<0.01
+# We reject the null hypothesis, statistical evidence shows average temperature 
+# is very likely to exceed 3.9 C.So, a corrective action in the Cold Storage Plant is required.
+
+
