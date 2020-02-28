@@ -1,0 +1,86 @@
+---
+title: "Carseats - SLM and MLM"
+author: "Mohanned Gomaa"
+date: "2/25/2020"
+output: word_document
+---
+
+The Overall Aim of this project is the following;
+1- Understand what affects Car Seats sales;
+2- Predict Sales; and 
+3- Prescribe strategies to increase sales.
+
+```{r} 
+#Set a Working Directory
+setwd("C:/Users/mgomaa032/Desktop/PwC/Projects/DXB/PnO/WorkFroce analytics/UT Austin/Module 5/Week 1")
+getwd()
+```
+
+```{r}
+#Import Data
+install.packages('ISLR')
+library(ISLR)
+Carseats
+attach(Carseats)
+```
+
+```{r}
+#Exploratory Analysis
+names(Carseats)
+dim(Carseats)
+str(Carseats)
+summary(Carseats)
+head(Carseats)
+```
+
+```{r}
+library(corrplot)
+corrplot(cor(Carseats[,-c(7,10,11)]),method = "circle")
+#the correlation plot shows clearly an inverse relation between sales and price. Followed by less strong positive relation with Advertising
+```
+
+```{r}
+#Checking sales distribution
+hist(Sales, col = 'Navy',xlab = 'Sales')
+abline(v = mean(Sales), col='Blue')
+abline(v = median(Sales) , col='Black')
+abline(v = names(tempo)[tempo==max(tempo)] , col='Red')
+summary(Sales)
+tempo = table (as.vector(Sales)) #mode calcultion step 1
+tempo
+names(tempo)[tempo==max(tempo)] #mode calcultion step 2
+
+#It seems that sales are normally distrbuted mean ~= Median..
+hist(Price, col = 'Navy',xlab = 'Price')
+abline(v = mean(Price), col='Blue')
+abline(v = median(Price) , col='Black')
+summary(Price)
+# Very minor skewness to the light. 
+
+plot(Price,Sales)
+abline(lm(Sales~Price), col='Red')
+lm(Sales~Price)
+#Show a -ve relation betwen price and sales, as price increase by 1 unit, sales drop by 53USD (Note: sales are 1kUSD).
+```    
+
+
+```{r}
+summary(lm(Sales~Price))
+#At the moment price seems like a significant predictor of sales, as proven by its P value. But, our model as is, only predicts ~20% of the variance in sales, as shown in our R2.
+```
+
+#Before adding further values let’s check for multicollinearity
+```{r}
+install.packages("rms")
+library(rms)
+Trail.MLM= lm(Sales~.,data = Carseats)
+vif(Trail.MLM) #No signs of multicollinearity.
+```
+
+```{r}
+summary(Trail.MLM)
+#Remove all of the follwoing,as they proved not to be a significant predictor of sales; Population, Education , UrbanYes and USYes. 
+```
+
+```{r}
+Trail2.model= lm(Sales~Price+Comp)
