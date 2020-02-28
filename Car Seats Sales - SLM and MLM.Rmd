@@ -82,5 +82,9 @@ summary(Trail.MLM)
 #Remove all of the follwoing,as they proved not to be a significant predictor of sales; Population, Education , UrbanYes and USYes. 
 ```
 
+
 ```{r}
-Trail2.model= lm(Sales~Price+Comp)
+Trail2.model= lm(Sales~Price+CompPrice+ShelveLoc+Advertising+Income+Age, data = Carseats)
+summary(Trail2.model)
+#After Removing all of the unsignificant predictors, we still could maitin a the same R2 of ~87%, and no impact on the Adjusted R2. 
+```
