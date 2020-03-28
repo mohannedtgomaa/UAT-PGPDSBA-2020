@@ -1,0 +1,349 @@
+---
+title: "Project 5 - Cars Case Study"
+author: "Mohanned Gomaa"
+date: "3/26/2020"
+output:
+  word_document: default
+  pdf_document: default
+---
+Introduction:
+
+This project requires you to understand what mode of transport employees prefers to commute to their office. The dataset "Cars-dataset" includes employee information about their mode of transport as well as their personal and professional details like age, salary, work exp. We need to predict whether or not an employee will use Car as a mode of transport. Also, which variables are a significant predictor behind this decision.
+
+
+```{r}
+setwd('D:/UT Autin/Module 5/Project') #setting my working directory 
+getwd()
+```
+
+```{r}
+#Importing Data into R, CSV file.
+Car.data = read.csv('Cars-dataset.csv', header = T) #loading data 
+head(Car.data,10) #exploring data 
+```
+
+```{r}
+#Understating data st.
+names(Car.data) #Know the col names
+str(Car.data)#learning about data type 
+ncol(Car.data) #Checking number of cols.
+nrow(Car.data) #checking number of rows
+colnames(Car.data) #Checking names of my variables 
+str(Car.data) #checking types and structure of my data
+summary(Car.data) #5 figure summary, descriptive stats. 
+```
+
+
+```{r}
+library(psych)
+describe(Car.data) #Understanding Data distribution and dispersion 
+```
+
+```{r}
+#Based on my initial analysis some variables does not make sense being in the current data type. So, transforming the following data points to factors ('Engineer,MBA,license').    
+
+str(Car.data)#learning about data type 
+```
+
+```{r}
+#Creating a new Target column and transforming factor into binary binary, 0 and 1.
+
+library(tidyverse)
+
+Car.data = mutate(Car.data, Target = Car.data$Transport)
+Car.data$Target= as.factor(str_replace_all(Car.data$Target,"Car","1")) #replace text
+Car.data$Target= as.factor(str_replace_all(Car.data$Target,"2Wheeler","0")) #replace text
+Car.data$Target= as.factor(str_replace_all(Car.data$Target,"Public Transport","0")) #replace text
+View(Car.data)
+str(Car.data)
+```
+
+```{r}
+#missing value check
+library(Amelia)
+missmap(Car.data, main = "Missing values vs observed")
+colSums(is.na(Car.data)) # only MBA has one cell. 
+mode= as.data.frame(table(Car.data$MBA)) #using the mode to populate the missing value
+mode
+Car.data$MBA[is.na(Car.data$MBA)] = 0 #changed missing value using mode 
+colSums(is.na(Car.data)) #Zero NA
+```
+```{r}
+#check if the data is balanced?
+table(Car.data$Target)
+35/4.18 #Only 8.4% are car users. We have a class in-balance issue here. 
+#I will run my models using this data to check the impact before and after adjusting inbalance
+```
+
+
+```{r}
+library(ggthemes)
+library(ggplot2)
+str(Car.data)
+
+Age_hist = ggplot(Car.data)+aes(Car.data$Age)+geom_histogram(binwidth =3, color ="Green", alpha = 0.5)+facet_grid(Car.data$Transport~.)+ggtitle(label = 'Tranportation Mean by Age')+ labs(x='Age', y='Users')
+Age_hist #The age breakdown shows that car is the preferred means of transportation for older age group between 36-40 years old. 
+hist(Car.data$Age[Car.data$Transport == 'Car'], col = 'Grey')
+
+Sal_hist = ggplot(Car.data)+aes(Car.data$Salary)+geom_histogram(binwidth =5, color ="Green", alpha = 0.5)+facet_grid(Car.data$Transport~.)+ggtitle(label = 'Tranportation Mean by Salary')+ labs(x='Salary', y='Users')
+Sal_hist #Salary breakdown shows that car is the preferred means of transportation of users in higher income bracket. 
+hist(Car.data$Salary[Car.data$Transport == 'Car'], col = 'Grey') #clear skewness to the left, clear as the summit of the distribution is to the right. 
+
+Exp_hist = ggplot(Car.data)+aes(Car.data$Work.Exp)+geom_histogram(binwidth =3, color ="Green", alpha = 0.5)+facet_grid(Car.data$Transport~.)+ggtitle(label = 'Tranportation Mean by Experience')+ labs(x='Experience', y='Users')
+Exp_hist #Experience breakdown shows that car is the preferred means of transportation of users tend to have more work experience. 
+hist(Car.data$Work.Exp[Car.data$Transport == 'Car'], col = 'Grey') #clear skewness to the left, clear as the summit of the distribution is to the right. 
+
+Gen_bar = ggplot(Car.data)+aes(Car.data$Gender)+geom_bar(color ="Green", alpha = 0.5)+facet_grid(Car.data$Transport~.)+ggtitle(label = 'Tranportation Mean by Gender')+ labs(x='Gender', y='Users')
+Gen_bar #nearly double of the car owners are males. 
+```
+
+
+In this step I will start building my model using the inbalanced data, to see the impact of corrective measures such as bagging, boosting and SMOTE.
+
+```{r}
+#Split my data into test and train data, using 70%-30% based on predicted class, to maintain same ratios. 
+
+table(Car.data$Target) 
+35/4.18 #only8.4%
+
+library(caTools) #very useful for its sampling function
+set.seed(69)
+split= sample.split(Car.data$Target,SplitRatio = 0.7) #split ratio 70%-30% 
+train.data = subset(Car.data,split==T) #train data split is at 70%
+test.data = subset(Car.data,split==F) #test data split is at 30%
+table(train.data$Target) #maintained same ratio of minority class of 8.2%
+table(test.data$Target) #maintained same ratio of minority class of 8.7%
+head(train.data,10)
+str(train.data)
+str(test.data)
+
+```
+
+Using the data split I will starting my classifier
+
+A- Logistic regression 
+It a type of regression that can be used to classify data, based on their probability of variable, between 0 and 1.
+
+```{r}
+log.model = glm(train.data$Target~., data = train.data [,-9], family = binomial(link = "logit"), maxit = 100)
+summary(log.model) #Based on number of trails it seems that there is number of highly correlated variables, need to be test using VIF. Meaning that variables are highly related causing the model to overfit.
+library(rms) #VIF function
+vif(log.model) #it show three variables highly correlated with a score more than 5, these are Age, Work exp.and salary.
+
+#With no R squared to assess our model we can use, the McFadden R2 index can be used to assess the model fit.
+
+library(pscl) #call for library for McFadden R2 index
+pR2(log.model)
+#The last three outcomes from pscl function pR2 present McFadden's pseudo r-squared, Maximum likelihood pseudo r-squared (Cox & Snell) and Cragg and Uhler's or Nagelkerke's pseudo r-squared. The calculation seems to be flawless, but the outcomes close to 1 seem to good to be true.
+
+log.model.tuned = glm(train.data$Target~train.data$Age+train.data$license, data = train.data[,-9], family = binomial(link = "logit"), maxit = 100)#Tuned model based the outcome of the P-value which test if the predictor is significantly different than zero, or simply good predictor or not.
+summary(log.model.tuned)
+vif(log.model.tuned)
+
+pR2(log.model.tuned)
+#The last three outcomes from pscl function pR2 present McFadden's pseudo r-squared, Maximum likelihood pseudo r-squared (Cox & Snell) and Cragg and Uhler's or Nagelkerke's pseudo r-squared. The calculation seems to be flawless, slight lower outcome, to a great extent more realistic. 
+```
+Based on the tuned logistic model we will attempt to predict data and test overall accuracy of the model. The tuned model mainly uses Age and distance as the main predictor of using a car, showing a significant P-vales. 
+
+```{r}
+library(caret)  #to be able to create a confusion matrix
+library(tidyverse)
+log.test = test.data #creating backup of my test data 
+str(train.data)
+str(log.test)
+#log.test$pred =  predict(object = log.model.tuned, newdata = as.data.frame(log.test[,1:8]),type = 'response')
+                    
+#confusionMatrix(log.test$Target,log.test$pred)
+
+# Overall accuracy of the model is ~%
+# Overall Recall of the model is ~%
+# Overall precision of the model is ~%
+```
+Based on the performance of the previous model(s) I will move one to the following;
+B- Naive Bayes
+
+```{r}
+library(e1071)#call for the library that has Naive bayes function
+nb.test = test.data #creating backup of my test data 
+nbm = naiveBayes(x = train.data[,1:8], y=train.data[,10] )
+nbm
+nb.test$pred = predict(nbm,newdata = nb.test[,1:8])
+confusionMatrix(nb.test$Target,nb.test$pred)
+# Overall accuracy of the model is ~98%
+# Overall Recall of the model is ~98%
+# Overall precision of the model is ~82%
+```
+
+Based on Naive Bayes, we got the best results so far with overall accuracy of 98% and precision of 82%. Our model used all the variables with no exclusion. But lets test the performance of KNN for better precision mainly. 
+
+C- KNN
+
+```{r}
+library(class)# calling KNN library
+knn.test = test.data #creating backup of my test data 
+Kmodel= knn3(train.data$Target~.,train.data[,1:8],k=5)
+knn.test$pred = predict(Kmodel,knn.test[,1:8], type = 'class')
+confusionMatrix(knn.test$Target,knn.test$pred)
+
+# Overall accuracy of the model is ~98%
+# Overall Recall of the model is ~98%
+# Overall precision of the model is ~82% No gain on precision
+```
+
+
+In attempt to increase precision we will use ensemble methods such as Bagging and Boosting.
+
+D- Bagging
+```{r}
+library(ipred) #Calling libraries for bagging function  
+library(rpart) #Calling libraries for bagging function 
+Bag.test = test.data #creating backup of my test data 
+Bag.m = bagging(train.data$Target~.,data= train.data[,1:8], control = rpart.control(maxdepth = 5, minsplit = 15))
+Bag.test$pred = predict(Bag.m, Bag.test[,1:8])
+confusionMatrix(Bag.test$Target,Bag.test$pred)
+head(Bag.test[,1:8],10)
+# Overall accuracy of the model is ~98%
+# Overall Recall of the model is ~98%
+# Overall precision of the model is ~82% No gain on precision
+```
+
+E- Boosting - XGboost
+```{r}
+library(xgboost) #calling library for accelerated GBM, XGboost
+library(Matrix)
+
+train.data1= sparse.model.matrix(train.data$Target~., data = train.data[,-9])#dummy coding and transforming data to matrix
+head(train.data1)
+output_vector = train.data$Target == "1"
+test.data1= sparse.model.matrix(test.data$Target~., data = test.data[,-9])
+
+xgb.features.train = as.matrix(train.data[,1:8]) #Transforming data into matrices
+xgb.Target.train = as.matrix(test.data[,10]) #XGboost only works with matrices 
+xgb.features.test = as.matrix(test.data[,1:8]) #same is done for test data
+xgb.test = test.data
+#Building the XGboost formula 
+xgbm = xgboost(data = train.data1, label = output_vector,eta = 0.001,
+              max_depth = 3,min_child_weight= 3, nrounds = 10000,nfold = 5, 
+              objective ='binary:logistic', verbose = 0,early_stopping_rounds = 10)
+out= predict(xgbm,test.data1)
+typeof(out)
+View(out)
+out$V1 = colnames('prob')
+colnames(out)
+xgb.features.test = as.data.frame(xgb.features.test)
+xgb.features.test =  cbind(xgb.features.test,out)
+xgb.features.test$pred = as.factor(ifelse(xgb.features.test$out>0.5,"1","0"))
+str(xgb.features.test)
+View(xgb.features.test)
+
+confusionMatrix(test.data$Target,xgb.features.test$pred)
+# Overall accuracy of the model is ~97% # lower performance in overall accuracy
+# Overall Recall of the model is ~98% - No gain
+# Overall precision of the model is ~82% No gain on precision
+```
+
+Based on the XGboost results, we might be able to tune the model in attempt to get better results. Mainly adjusting learning rate (lr), max depth (md) and number of rounds (nr).
+
+E.2.a- XGboost Tuned
+```{r}
+# Creating number of scenarios to test of the best outcome by tuning the three parameters discussed earlier
+tp_xgb= vector()
+lr = c(0.001,0.01,0.1,0.3,0.5,0.7,1)
+md = c(1,3,5,7,9,15)
+nr = c(2,50,100,1000,10000)
+for (i in nr) {
+xgbm = xgboost(data = train.data1, label = output_vector,eta = 0.001,
+              max_depth = 3,min_child_weight= 3, nrounds = i ,nfold = 5, 
+              objective ='binary:logistic', verbose = 0,early_stopping_rounds = 10)
+out= predict(xgbm,test.data1)
+ tp_xgb = cbind(tp_xgb,sum(xgb.test$Target==1 & out>=0.5))}
+
+tp_xgb
+
+#Based on the outcome of the tuning parameter we pick the best scenarios and run out model and compare results. 
+
+
+xgbm.tuned = xgboost(data = train.data1, label = output_vector,eta = 0.001,
+              max_depth = 3,min_child_weight= 3, nrounds = 10000,nfold = 5, 
+              objective ='binary:logistic', verbose = 0,early_stopping_rounds = 10)
+xgb.features.test$pred = predict(xgbm,xgb.features.test)
+confusionMatrix(test.data$Target,xgb.features.test$pred)
+
+```
+
+After trying all the above solutions, let's now really tackle the core of the issue. The main issue is the model data has displayed an inbalance behavior. The best solution for such issue is using SMOTE.
+
+F- SMOTE
+SMOTE or synthetic minority over sampling technique is an artificial method of correcting inbalance issue thought oversampling minority class.
+
+```{r}
+library(DMwR) #calling SMOTE library
+SMOTE.train = subset(Car.data,split == T) #re-splitting my data for SMOTE
+colnames(SMOTE.train)
+SMOTE.test = subset(Car.data,split == F) #re-splitting my data for SMOTE
+Balanced.data = SMOTE(Target~.,SMOTE.train, k =5, perc.over = 4800,
+                      perc.under = 1000)
+#percent over, mainly the ratio of adding minority instance for each majority.
+#percent under, mainly the ratio of removing majority instance for each minority.
+```
+
+
+Now lets try using our balanced data into our models
+1- Naive Bayes
+```{r}
+library(e1071)#call for the library that has Naive bayes function
+nb.test = test.data #creating backup of my test data 
+nbm = naiveBayes(x = Balanced.data[,1:8], y=Balanced.data[,10] )
+nbm
+nb.test$pred = predict(nbm,newdata = nb.test[,1:8])
+confusionMatrix(nb.test$Target,nb.test$pred)
+# Overall accuracy of the model is ~98% - No Gain
+# Overall Recall of the model is ~98% - No Gain
+# Overall precision of the model is ~82% - No Gain
+```
+ 2- Xboost
+ 
+```{r}
+library(xgboost) #calling library for accelerated GBM, XGboost
+library(Matrix)
+
+train.dataB= sparse.model.matrix(Balanced.data$Target~., data = Balanced.data[,-9]) #dummy coding and transforming data to matrix
+head(train.dataB)
+output_vectorB = Balanced.data$Target == "1"
+test.data1= sparse.model.matrix(test.data$Target~., data = test.data[,-9])
+xgb.features.test2 = as.matrix(test.data[,1:8]) #same is done for test data
+
+#Building the XGboost formula 
+xgbm = xgboost(data = train.dataB, label = output_vectorB,eta = 0.001,
+              max_depth = 3,min_child_weight= 3, nrounds = 10000,nfold = 5, 
+              objective ='binary:logistic', verbose = 0,early_stopping_rounds = 10)
+outB= predict(xgbm,test.data1)
+
+
+xgb.features.test2 = as.data.frame(xgb.features.test)
+xgb.features.test2 =  cbind(xgb.features.test2,outB)
+xgb.features.test2$pred = as.factor(ifelse(xgb.features.test2$outB>0.5,"1","0"))
+
+confusionMatrix(test.data$Target,xgb.features.test2$pred)
+# Overall accuracy of the model is ~98% - Overall gain 1%
+# Overall Recall of the model is ~98% - No gain
+# Overall precision of the model is ~82% No gain on precision
+```
+
+The best model output was KNN, so let use our balanced data to check what will happen with my precision rate 
+
+```{r}
+library(class)# calling KNN library
+knn.test = test.data #creating backup of my test data 
+Kmodel= knn3(Balanced.data$Target~.,Balanced.data[,1:8],k=5)
+knn.test$pred = predict(Kmodel,knn.test[,1:8], type = 'class')
+confusionMatrix(knn.test$Target,knn.test$pred)
+
+# Overall accuracy of the model is ~99% -  Overall Gain 1%
+# Overall Recall of the model is ~99% - Overall Gain 1%
+# Overall precision of the model is ~91% - Overall Gain 9%
+```
+A noticeable gain on all front, KNN has proved to the best classifier compared to other peer model.
+
+In conclusion, KNN has proved that its the best classifier among its peers. We were able to use all the variables in our data set and yield high accuracy, recall and precision rates. Hence, we recommed using this model in your projections. 
+
