@@ -5,22 +5,34 @@ date: "3/26/2020"
 output:
   word_document: default
   pdf_document: default
+  html_document:
+    df_print: paged
 ---
 Introduction:
 
 This project requires you to understand what mode of transport employees prefers to commute to their office. The dataset "Cars-dataset" includes employee information about their mode of transport as well as their personal and professional details like age, salary, work exp. We need to predict whether or not an employee will use Car as a mode of transport. Also, which variables are a significant predictor behind this decision.
 
+The overall goal, is to identify the best model to be used to predict number of car users, from my Empolyee list.
 
+
+Step1: Set my working directory for saving and easy access to my code and documents.
 ```{r}
 setwd('D:/UT Autin/Module 5/Project') #setting my working directory 
-getwd()
+getwd() #check that directory is set
 ```
 
+
+Step2: Import my data and save in a R object 
 ```{r}
 #Importing Data into R, CSV file.
 Car.data = read.csv('Cars-dataset.csv', header = T) #loading data 
-head(Car.data,10) #exploring data 
+head(Car.data,10) #exploring data, first ten colmens. 
 ```
+
+The above table shows the type of each variable, you will notice couple of issues, that there is no Target variable. Currently we have only Transport, which shows us the type of transport used by my employees. So, we need to actually create a Target.   
+
+To take a deeper look of my data, understand type through descriptive statistics. 
+The five figure summary gives you a clear over view of the distribution of your data, by looking by the Mean, Median, IQR, Minium and Maximum. 
 
 ```{r}
 #Understating data st.
@@ -33,11 +45,14 @@ str(Car.data) #checking types and structure of my data
 summary(Car.data) #5 figure summary, descriptive stats. 
 ```
 
-
+Another detailed look using the describe function, which shows us the skew of data.
 ```{r}
 library(psych)
 describe(Car.data) #Understanding Data distribution and dispersion 
 ```
+
+Quickly on the back of the two above analysis, you will notice skew and outliers for mainly age, experience, salary and etc. But, I decided not to treat them as it is normal to have a higher age, experience and salary in such data set, that takes in consideration all employees, including top management such CEO, MD and etc.  
+
 
 ```{r}
 #Based on my initial analysis some variables does not make sense being in the current data type. So, transforming the following data points to factors ('Engineer,MBA,license').    
@@ -45,18 +60,23 @@ describe(Car.data) #Understanding Data distribution and dispersion
 str(Car.data)#learning about data type 
 ```
 
+
+Now, we need to create a Target column, based on the transport column. So, I changed all Transport cells that equals to car to 1, anything other is 0. 
+
 ```{r}
 #Creating a new Target column and transforming factor into binary binary, 0 and 1.
 
-library(tidyverse)
+library(tidyverse) #load tidyverse to use mutate function.
 
 Car.data = mutate(Car.data, Target = Car.data$Transport)
-Car.data$Target= as.factor(str_replace_all(Car.data$Target,"Car","1")) #replace text
-Car.data$Target= as.factor(str_replace_all(Car.data$Target,"2Wheeler","0")) #replace text
-Car.data$Target= as.factor(str_replace_all(Car.data$Target,"Public Transport","0")) #replace text
-View(Car.data)
+Car.data$Target= as.factor(str_replace_all(Car.data$Target,"Car","1")) #replace car text to 1
+Car.data$Target= as.factor(str_replace_all(Car.data$Target,"2Wheeler","0")) #replace other text to 0 
+Car.data$Target= as.factor(str_replace_all(Car.data$Target,"Public Transport","0"))#replace other text to 0  
+View(Car.data)  #confirming changes took place.
 str(Car.data)
 ```
+
+Once, we have finished data cleaning process we need now to check if we have any missing data and decide on how to treat them. 
 
 ```{r}
 #missing value check
@@ -68,6 +88,11 @@ mode
 Car.data$MBA[is.na(Car.data$MBA)] = 0 #changed missing value using mode 
 colSums(is.na(Car.data)) #Zero NA
 ```
+
+I have used Amelia package to plot missing data and col sums function to map which variable. I have found only one missing data under MBA. It was treated using mode, as was only one row and did not want to delete it as we already have limited data. 
+
+Once, I treated missing values, now I need to check if my data is balanced. So, what do I mean by balanced data is that we should have a reasonable proportion in your data between True and Flase for your Target class.  
+
 ```{r}
 #check if the data is balanced?
 table(Car.data$Target)
@@ -75,6 +100,10 @@ table(Car.data$Target)
 #I will run my models using this data to check the impact before and after adjusting inbalance
 ```
 
+Based on my analysis it showed that only 8.4% of my data is True (or 1,Car), this percentage might be acceptable for data set like diseases, or default but for a context like ours I believe the proportion between True and False should be more (in the range of 20%-80% or even 30%-70%). I decided that I will treat my data using SMOTE, but I will try to run my model before balancing data and compare it performance once using balanced data. 
+
+
+Now I need to visualize my data using ggplot. I attempt try to see the relation between using car and variables such as gender, age, salary and etc..
 
 ```{r}
 library(ggthemes)
@@ -98,8 +127,9 @@ Gen_bar #nearly double of the car owners are males.
 ```
 
 
-In this step I will start building my model using the inbalanced data, to see the impact of corrective measures such as bagging, boosting and SMOTE.
+In this step I will start building my model using the unbalanced data, to see the impact of corrective measures such as bagging, boosting and SMOTE.
 
+The first step I need to attempt is splitting my data into test and train.
 ```{r}
 #Split my data into test and train data, using 70%-30% based on predicted class, to maintain same ratios. 
 
@@ -119,13 +149,13 @@ str(test.data)
 
 ```
 
-Using the data split I will starting my classifier
+Using this data split I use my train data to train my classifier and test it with my test data.Now, I will attempt to build 3 models, classifier type, Logistic regession, KNN and Naive Bayes..
 
 A- Logistic regression 
-It a type of regression that can be used to classify data, based on their probability of variable, between 0 and 1.
+It a type of regression model that can be used to classify data, based on their probability of variable, fall between 0 and 1.So, if the probability of the out is higher than a threshold let's say 50%, its classified as 1 and if it is lower its classified as 0.
 
 ```{r}
-log.model = glm(train.data$Target~., data = train.data [,-9], family = binomial(link = "logit"), maxit = 100)
+log.model = glm(Target~., data = train.data [,-9], family = binomial(link = "logit"), maxit = 100)
 summary(log.model) #Based on number of trails it seems that there is number of highly correlated variables, need to be test using VIF. Meaning that variables are highly related causing the model to overfit.
 library(rms) #VIF function
 vif(log.model) #it show three variables highly correlated with a score more than 5, these are Age, Work exp.and salary.
@@ -136,13 +166,14 @@ library(pscl) #call for library for McFadden R2 index
 pR2(log.model)
 #The last three outcomes from pscl function pR2 present McFadden's pseudo r-squared, Maximum likelihood pseudo r-squared (Cox & Snell) and Cragg and Uhler's or Nagelkerke's pseudo r-squared. The calculation seems to be flawless, but the outcomes close to 1 seem to good to be true.
 
-log.model.tuned = glm(train.data$Target~train.data$Age+train.data$license, data = train.data[,-9], family = binomial(link = "logit"), maxit = 100)#Tuned model based the outcome of the P-value which test if the predictor is significantly different than zero, or simply good predictor or not.
+log.model.tuned = glm(Target~Age+Distance, data = train.data[,-9], family = binomial(link = "logit"), maxit = 100)#Tuned model based the outcome of the P-value which test if the predictor is significantly different than zero, or simply good predictor or not.
 summary(log.model.tuned)
 vif(log.model.tuned)
 
 pR2(log.model.tuned)
 #The last three outcomes from pscl function pR2 present McFadden's pseudo r-squared, Maximum likelihood pseudo r-squared (Cox & Snell) and Cragg and Uhler's or Nagelkerke's pseudo r-squared. The calculation seems to be flawless, slight lower outcome, to a great extent more realistic. 
 ```
+I've attempted to tune my model by trying out different combination of different predictors and testing for multicollinearity. We settled on Age, License and distance are my best predictors. 
 Based on the tuned logistic model we will attempt to predict data and test overall accuracy of the model. The tuned model mainly uses Age and distance as the main predictor of using a car, showing a significant P-vales. 
 
 ```{r}
@@ -151,21 +182,26 @@ library(tidyverse)
 log.test = test.data #creating backup of my test data 
 str(train.data)
 str(log.test)
-#log.test$pred =  predict(object = log.model.tuned, newdata = as.data.frame(log.test[,1:8]),type = 'response')
-                    
-#confusionMatrix(log.test$Target,log.test$pred)
+log.test$pred =  predict(object = log.model.tuned, newdata = as.data.frame(log.test[,1:8]),type = 'response') #using the predict function to get my prediction as a probability 
 
-# Overall accuracy of the model is ~%
-# Overall Recall of the model is ~%
-# Overall precision of the model is ~%
+log.test$predtaregt =as.factor(ifelse(log.test$pred>0.5,1,0)) #Changing my probability into categories.  
+
+confusionMatrix(log.test$Target,log.test$predtaregt) #this matrix is a performance validation measure that compare actual results vs prediction. Measuring overall model accuracy, Sensitivity and most importantly precision. 
+
+
+# Overall accuracy of the model is 98%
+# Overall Recall of the model is 98%
+# Overall precision of the model is ~82%
 ```
 Based on the performance of the previous model(s) I will move one to the following;
+
 B- Naive Bayes
+Is a very simple model that assumes that predictor variables are independent from each other, hence the namesake. It uses Bayes theorem in predicting my Target. In summary Bayes rule predicates outcome based on Postirer probability, or the probability of that an object belong to a class given (conditioned) evidence. Postirer probability, is built on the back of what we call Prior probability, or simply its the assumption that an object belong to a class with out looking at evidence (unconditioned probability). 
 
 ```{r}
 library(e1071)#call for the library that has Naive bayes function
 nb.test = test.data #creating backup of my test data 
-nbm = naiveBayes(x = train.data[,1:8], y=train.data[,10] )
+nbm = naiveBayes(x = train.data[,1:8], y=train.data[,10] ) #building my model
 nbm
 nb.test$pred = predict(nbm,newdata = nb.test[,1:8])
 confusionMatrix(nb.test$Target,nb.test$pred)
@@ -177,7 +213,7 @@ confusionMatrix(nb.test$Target,nb.test$pred)
 Based on Naive Bayes, we got the best results so far with overall accuracy of 98% and precision of 82%. Our model used all the variables with no exclusion. But lets test the performance of KNN for better precision mainly. 
 
 C- KNN
-
+The best thing about KNN is that predicts using training data directly. Prediction happnes by looks at instances and searching data set for k most similar instances or neighbors, the output is summarized as k groups. The similarity is defined by measure distance using euclidean distance. 
 ```{r}
 library(class)# calling KNN library
 knn.test = test.data #creating backup of my test data 
@@ -194,6 +230,7 @@ confusionMatrix(knn.test$Target,knn.test$pred)
 In attempt to increase precision we will use ensemble methods such as Bagging and Boosting.
 
 D- Bagging
+So, bagging is technique of parallel learning.Aiming to decrease variance by sampling by replacement from the data set and building number model in attempt to get the best results.
 ```{r}
 library(ipred) #Calling libraries for bagging function  
 library(rpart) #Calling libraries for bagging function 
@@ -208,6 +245,8 @@ head(Bag.test[,1:8],10)
 ```
 
 E- Boosting - XGboost
+Unlike bagging boosting is sequential learning through penalization. So, you run number of trees stumps and each time an error occurs we weight even more in the following tree, this is called learning rate. XGboost is very powerful method of boosting that is very fast, it have many tuning parameters and gives you the ability for early stopping.
+
 ```{r}
 library(xgboost) #calling library for accelerated GBM, XGboost
 library(Matrix)
@@ -228,10 +267,10 @@ xgbm = xgboost(data = train.data1, label = output_vector,eta = 0.001,
 out= predict(xgbm,test.data1)
 typeof(out)
 View(out)
-out$V1 = colnames('prob')
-colnames(out)
+xgb.features.test = xgb.features.test[,-9]
 xgb.features.test = as.data.frame(xgb.features.test)
 xgb.features.test =  cbind(xgb.features.test,out)
+View(xgb.features.test)
 xgb.features.test$pred = as.factor(ifelse(xgb.features.test$out>0.5,"1","0"))
 str(xgb.features.test)
 View(xgb.features.test)
@@ -242,7 +281,8 @@ confusionMatrix(test.data$Target,xgb.features.test$pred)
 # Overall precision of the model is ~82% No gain on precision
 ```
 
-Based on the XGboost results, we might be able to tune the model in attempt to get better results. Mainly adjusting learning rate (lr), max depth (md) and number of rounds (nr).
+Based on the XGboost results, we might be able to tune the model in attempt to get better results.
+So, I built a custom function that tries different input to model tuning parameter to get the best results.Mainly adjusting learning rate (lr), max depth (md) and number of rounds (nr).
 
 E.2.a- XGboost Tuned
 ```{r}
@@ -251,9 +291,9 @@ tp_xgb= vector()
 lr = c(0.001,0.01,0.1,0.3,0.5,0.7,1)
 md = c(1,3,5,7,9,15)
 nr = c(2,50,100,1000,10000)
-for (i in nr) {
+for (i in md ) {
 xgbm = xgboost(data = train.data1, label = output_vector,eta = 0.001,
-              max_depth = 3,min_child_weight= 3, nrounds = i ,nfold = 5, 
+              max_depth = i ,min_child_weight= 3, nrounds = 1000 ,nfold = 5, 
               objective ='binary:logistic', verbose = 0,early_stopping_rounds = 10)
 out= predict(xgbm,test.data1)
  tp_xgb = cbind(tp_xgb,sum(xgb.test$Target==1 & out>=0.5))}
@@ -263,12 +303,24 @@ tp_xgb
 #Based on the outcome of the tuning parameter we pick the best scenarios and run out model and compare results. 
 
 
-xgbm.tuned = xgboost(data = train.data1, label = output_vector,eta = 0.001,
-              max_depth = 3,min_child_weight= 3, nrounds = 10000,nfold = 5, 
+xgbm.tuned = xgboost(data = train.data1, label = output_vector,eta = 0.01,
+              max_depth = 3,min_child_weight= 3, nrounds = 1000,nfold = 5, 
               objective ='binary:logistic', verbose = 0,early_stopping_rounds = 10)
-xgb.features.test$pred = predict(xgbm,xgb.features.test)
-confusionMatrix(test.data$Target,xgb.features.test$pred)
 
+Tuned.out = predict(xgbm.tuned,test.data1)
+
+
+xgb.features.test =  cbind(xgb.features.test,Tuned.out)
+View(xgb.features.test)
+xgb.features.test$pred.tuned = as.factor(ifelse(xgb.features.test$Tuned.out>0.5,"1","0"))
+View(xgb.features.test)
+
+
+confusionMatrix(test.data$Target,xgb.features.test$pred.tuned)
+
+# Overall accuracy of the model is ~97% - #no improvement on my tuned model
+# Overall Recall of the model is ~98% - #no improvement on my tuned model
+# Overall precision of the model is ~82% - #no improvement on my tuned model
 ```
 
 After trying all the above solutions, let's now really tackle the core of the issue. The main issue is the model data has displayed an inbalance behavior. The best solution for such issue is using SMOTE.
@@ -288,8 +340,9 @@ Balanced.data = SMOTE(Target~.,SMOTE.train, k =5, perc.over = 4800,
 ```
 
 
-Now lets try using our balanced data into our models
-1- Naive Bayes
+Now lets try using our balanced data into our models, to check improvement on performance.
+
+1- Naive Bayes run with balanced train data and test it using my test data.
 ```{r}
 library(e1071)#call for the library that has Naive bayes function
 nb.test = test.data #creating backup of my test data 
@@ -300,8 +353,24 @@ confusionMatrix(nb.test$Target,nb.test$pred)
 # Overall accuracy of the model is ~98% - No Gain
 # Overall Recall of the model is ~98% - No Gain
 # Overall precision of the model is ~82% - No Gain
+
+# Another test for the model performance is ROC curve which plots true postive ratio compared to false positive ratio. 
+
+library(ROCR) # use for ROC curve 
+
+y.nb= as.numeric(nb.test$pred)
+x.nb= as.numeric(nb.test$Target)
+
+model_score_test_nb = prediction(y.nb,x.nb)
+model_perf_test_nb =  performance(model_score_test_nb, "tpr", "fpr")
+plot(model_perf_test_nb,col = "red", lab = c(10,10,10))
+
+
 ```
- 2- Xboost
+
+Overall, Naive bayes has shown no improvement as shown above. I have added a second perfromance measure the ROC, and we can see the peefromance of the model polted. 
+
+2- XGboost run with balanced train data and test it using my test data.
  
 ```{r}
 library(xgboost) #calling library for accelerated GBM, XGboost
@@ -328,10 +397,48 @@ confusionMatrix(test.data$Target,xgb.features.test2$pred)
 # Overall accuracy of the model is ~98% - Overall gain 1%
 # Overall Recall of the model is ~98% - No gain
 # Overall precision of the model is ~82% No gain on precision
+
+# Another test for the model performance is ROC curve which plots true positive ratio compared to false positive ratio. 
+
+y.xgboost= as.numeric(xgb.features.test2$pred)
+x.xgboosr= as.numeric(test.data$Target)
+
+model_score_test_xgboost = prediction(y.xgboost,x.xgboosr)
+model_perf_test_xgboost =  performance(model_score_test_xgboost, "tpr", "fpr")
+plot(model_perf_test_xgboost,col = "red", lab = c(10,10,10))
+
 ```
+Overall, XGboost has shown no improvement as shown above. And, its ROC curve compared to NB, show no better improvement. 
 
-The best model output was KNN, so let use our balanced data to check what will happen with my precision rate 
+3- Logistic Regression 
+```{r}
+View(Balanced.data)
+log.model.tuned.2 = glm(Target~Age+Distance, data = Balanced.data[,-9], family = binomial(link = "logit"), maxit = 100)
 
+log.test$pred2 =  predict(object = log.model.tuned.2, newdata = as.data.frame(log.test[,1:8]),type = 'response') #using the predict function to get my prediction as a probability 
+
+log.test$predtaregt2 =as.factor(ifelse(log.test$pred2>0.5,1,0)) #Changing my probability into categories.  
+
+confusionMatrix(log.test$Target,log.test$predtaregt2)
+
+# Overall accuracy of the model is ~99% - Overall gain 1%
+# Overall Recall of the model is ~99% -  Overall gain 1%
+# Overall precision of the model is ~91% -  Overall gain 9%
+
+# Another test for the model performance is ROC curve which plots true positive ratio compared to false positive ratio. 
+
+y.log= as.numeric(log.test$predtaregt2)
+x.log= as.numeric(log.test$Target)
+
+model_score_test_log = prediction(y.log,x.log)
+model_perf_test_log =  performance(model_score_test_log, "tpr", "fpr")
+plot(model_perf_test_log,col = "red", lab = c(10,10,10))
+
+```
+Very high performance for my logistic model, but lets now test KNN. 
+The best model in stage one was balancing the data was KNN, so let use our balanced data to check what will happen with my precision rate 
+
+3- KNN run with balanced train data and test it using my test data.
 ```{r}
 library(class)# calling KNN library
 knn.test = test.data #creating backup of my test data 
@@ -342,8 +449,26 @@ confusionMatrix(knn.test$Target,knn.test$pred)
 # Overall accuracy of the model is ~99% -  Overall Gain 1%
 # Overall Recall of the model is ~99% - Overall Gain 1%
 # Overall precision of the model is ~91% - Overall Gain 9%
-```
-A noticeable gain on all front, KNN has proved to the best classifier compared to other peer model.
 
-In conclusion, KNN has proved that its the best classifier among its peers. We were able to use all the variables in our data set and yield high accuracy, recall and precision rates. Hence, we recommed using this model in your projections. 
+# Another test for the model performance is ROC curve which plots true postive ratio compared to false positive ratio. 
+
+library(ROCR) # use for ROC curve 
+??ROCR
+
+actaul.knn = knn.test$Target
+Pred.knn = knn.test$pred
+View(Pred.knn)
+??prediction
+str(Pred.knn)
+y= as.numeric(Pred.knn)
+x= as.numeric(actaul.knn)
+
+model_score_test_lr = prediction(y,x)
+model_perf_test_lr =  performance(model_score_test_lr, "tpr", "fpr")
+plot(model_perf_test_lr,col = "red", lab = c(10,10,10))
+
+```
+A noticeable gain on all front, KNN has proved to the best classifier compared to other peer model. This is even further proved by the ROC curve that has a higher summit at 0.9, compared to other model which summit reached 0.8 only.
+
+In conclusion, Both logistic and KNN have yielded similar results and proved that its the best classifier among its peers. We were able to use all the variables in our data set and yield high accuracy, recall and precision rates. Hence, we recommend using this model in your projections. 
 
